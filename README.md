@@ -13,3 +13,9 @@ This package is mainly for the purpose of comparing the performance of procedure
 - Pretty printing of results.
 - Results can be export to CSV files.
 
+### Examples
+
+Here is [an example](http://nbviewer.ipython.org/github/lindahua/BenchmarkLite.jl/blob/master/examples/mathfuns_benchmark.ipynb) in the form as IJulia notebook.
+
+This example illustrates the use of this package step-by-step.
+
