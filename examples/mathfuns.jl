@@ -52,11 +52,11 @@ procs = Proc[ VecMath{Sqrt}(),
               VecMath{Log}(), 
               VecMath{Sin}() ]
 
-cfgs = 2 .^ (4:11)
+cfgs = 2 .^ (4:12)
 
 println("Running log:")
 println("--------------------")
-rtable = run(procs, cfgs)
+rtable = run(procs, cfgs; duration=0.2)
 @assert isa(rtable, BenchmarkTable)
 println()
 
@@ -64,5 +64,8 @@ println()
 
 show(rtable; unit=:mps, cfghead="len")
 
+# open("mathfuns.bench.csv", "w") do f
+#   writecsv(f, rtable)
+# end
 
 

@@ -147,6 +147,18 @@ show(bt::BenchmarkTable; unit::Symbol=:sec, cfghead="config") =
     show(STDOUT, bt; unit=unit, cfghead=cfghead)
 
 
+function Base.writecsv(io::IO, bt::BenchmarkTable)
+    println(io, "proc,cfg,length,nruns,elapsed")
+    for (j, p) in enumerate(bt.procs)
+        pname = string(p)
+        for (i, c) in enumerate(bt.cfgs) 
+            e = bt[i,j]
+            println(io, join({repr(pname), repr(string(c)), e.plen, e.nruns, e.etime}, ","))
+        end
+    end
+end
+
+
 ##### Run Benchmarks
 
 function run{P<:Proc}(p::P, cfg; 
