@@ -68,13 +68,17 @@ abstract BenchmarkUnit
 type Sec <: BenchmarkUnit end
 type Msec <: BenchmarkUnit end
 type Usec <: BenchmarkUnit end
+type Nsec <: BenchmarkUnit end
+type Ups <: BenchmarkUnit end
 type Kps <: BenchmarkUnit end
 type Mps <: BenchmarkUnit end
 type Gps <: BenchmarkUnit end
 
-get(e::BenchmarkEntry, unit::Sec) = e.etime
-get(e::BenchmarkEntry, unit::Msec) = e.etime * 1.0e3
-get(e::BenchmarkEntry, unit::Usec) = e.etime * 1.0e6
+get(e::BenchmarkEntry, unit::Sec) = e.etime / e.nruns
+get(e::BenchmarkEntry, unit::Msec) = e.etime * 1.0e3 / e.nruns
+get(e::BenchmarkEntry, unit::Usec) = e.etime * 1.0e6 / e.nruns
+get(e::BenchmarkEntry, unit::Nsec) = e.etime * 1.0e9 / e.nruns
+get(e::BenchmarkEntry, unit::Ups) = (1.0 * e.plen * e.nruns) / e.etime
 get(e::BenchmarkEntry, unit::Kps) = (1.0e-3 * e.plen * e.nruns) / e.etime
 get(e::BenchmarkEntry, unit::Mps) = (1.0e-6 * e.plen * e.nruns) / e.etime
 get(e::BenchmarkEntry, unit::Gps) = (1.0e-9 * e.plen * e.nruns) / e.etime
@@ -98,11 +102,13 @@ end
 function show(io::IO, bt::BenchmarkTable; unit::Symbol=:sec, cfghead="config")
     # getting all strings first
     u = unit == :sec ? Sec() :
-        unit == :msec ? MSec() :
-        unit == :usec ? USec() :
+        unit == :msec ? Msec() :
+        unit == :usec ? Usec() :
+        unit == :nsec ? Nsec() :
         unit == :kps ? Kps() :
         unit == :mps ? Mps() :
         unit == :gps ? Gps() : 
+        unit == :ups ? Ups() :
         error("Invalid unit value :$(unit).")
     S = _show_table(bt, u, cfghead)
     nrows, ncols = size(S)
