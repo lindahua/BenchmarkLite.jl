@@ -19,3 +19,5 @@ Here is [an example](http://nbviewer.ipython.org/github/lindahua/BenchmarkLite.j
 
 This example illustrates the use of this package step-by-step.
 
+*BenchmarkLite* is being used by some other packages (*e.g*, [StatsBase.jl](https://github.com/JuliaStats/StatsBase.jl), and [Distributions.jl](https://github.com/JuliaStats/Distributions.jl)) for benchmarking.
+
