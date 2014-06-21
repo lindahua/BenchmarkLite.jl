@@ -10,10 +10,13 @@ export BenchmarkTable, BenchmarkEntry, cfgname, procname
 #
 # Following methods should be defined on each subtype of Proc
 #
-# - Base.string(proc):          get a description
-# - Base.length(proc):          the problem size (e.g. the number of elements to process)
-# - Base.isvalid(proc, cfg):    test whether a config is valid for the given proc
-# - Base.run(proc, cfg):        run the procedure under the given config  
+# - string(proc):          get a description
+# - length(proc):          the problem size (e.g. the number of elements to process)
+# - isvalid(proc, cfg):    test whether a config is valid for the given proc
+#
+# - s = start(proc, cfg):  set up (not count in the run-time)
+# - run(proc, cfg, s):     run the procedure under the given config  
+# - done(proc, cfg, s):    tear down (not count in the run-time)
 #
 abstract Proc
                   
@@ -132,7 +135,8 @@ end
 
 ##### Run Benchmarks
 
-function run{P<:Proc}(p::P, cfg; nruns::Int = 0, duration::Float64=1.0)
+function run{P<:Proc}(p::P, cfg; 
+                      nruns::Int = 0, duration::Float64=1.0, allowgc::Bool=true)
     # Run a procedure under a certain config
     #
     # Arguments:
@@ -160,8 +164,15 @@ function run{P<:Proc}(p::P, cfg; nruns::Int = 0, duration::Float64=1.0)
         return (0, 0.0)
     end
 
+    # set up
+    s = start(p, cfg)
+
     # warming
-    run(p, cfg)
+    run(p, cfg, s)
+
+    if !allowgc
+        gc_disable()
+    end
 
     # probing
     if nruns <= 0
@@ -172,6 +183,13 @@ function run{P<:Proc}(p::P, cfg; nruns::Int = 0, duration::Float64=1.0)
     # measuring
     etime = @elapsed for i = 1:nruns
         run(p, cfg)
+    end
+
+    # tear down
+    done(p, cfg, s)
+
+    if !allowgc
+        gc_enable()
     end
 
     return (nruns, etime)
