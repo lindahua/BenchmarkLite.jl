@@ -203,6 +203,14 @@ function run{P<:Proc}(p::P, cfg;
     # probing
     if nruns <= 0
         et = @elapsed run(p, cfg, s)
+        # if et is very short, we will perform more accurate probing
+        if et < duration / 500
+            nr = max(iceil(duration / 500), 2)
+            et2 = @elapsed for i=1:nr 
+                run(p, cfg, s)
+            end
+            et = et2 / nr
+        end
         nruns = iceil(duration / et)
     end
 
