@@ -2,7 +2,7 @@ module BenchmarkLite
 
 import Base: size, length, get, getindex, run, show
 
-export BenchmarkTable, BenchmarkEntry, cfgname, procname
+export Proc, BenchmarkTable, BenchmarkEntry, cfgname, procname
 
 ##### Types
 
@@ -11,7 +11,7 @@ export BenchmarkTable, BenchmarkEntry, cfgname, procname
 # Following methods should be defined on each subtype of Proc
 #
 # - string(proc):          get a description
-# - length(proc):          the problem size (e.g. the number of elements to process)
+# - length(proc, cfg):     the problem size (e.g. the number of elements to process)
 # - isvalid(proc, cfg):    test whether a config is valid for the given proc
 #
 # - s = start(proc, cfg):  set up (not count in the run-time)
@@ -19,25 +19,25 @@ export BenchmarkTable, BenchmarkEntry, cfgname, procname
 # - done(proc, cfg, s):    tear down (not count in the run-time)
 #
 abstract Proc
-                  
+
 
 ##### Results
 
 type BenchmarkTable
     cfgs::Vector        # length = m
-    procs::Vector       # length = n
-    plens::Vector{Int}  # n vector, proc lengths
+    procs::Vector{Proc} # length = n
+    plens::Matrix{Int}      # m-by-n vector, proc lengths
     nruns::Matrix{Int}      # m-by-n matrix, number of repeat times (in measuring stage)
     etime::Matrix{Float64}  # m-by-n matrix, elapsed time (in measuring stage)
 end
 
-function BenchmarkTable(cfgs::Vector, procs::Vector)
+function BenchmarkTable(cfgs::Vector, procs::Vector{Proc})
     m = length(cfgs)
     n = length(procs)
-    for p in procs
-        isa(p, Proc) || error("Each element in procs must be an instance of Proc.")
+    plens = zeros(m, n)
+    for (i, c) in enumerate(cfgs), (j, p) in enumerate(procs)
+        plens[i,j] = length(p, c)
     end
-    plens = Int[length(p) for p in procs]
     nruns = zeros(Int, m, n)
     etime = zeros(m, n)
     BenchmarkTable(cfgs, procs, plens, nruns, etime)
@@ -58,7 +58,7 @@ size(bt::BenchmarkTable, i::Integer) = i == 1 ? length(bt.cfgs) :
                                        i == 2 ? length(bt.procs) : 1
 
 getindex(bt::BenchmarkTable, i::Integer, j::Integer) = 
-    BenchmarkEntry(bt.plens[j], bt.nruns[i,j], bt.etime[i,j])
+    BenchmarkEntry(bt.plens[i,j], bt.nruns[i,j], bt.etime[i,j])
 
 
 ##### Show Results
@@ -80,11 +80,11 @@ get(e::BenchmarkEntry, unit::Mps) = (1.0e-6 * e.plen * e.nruns) / e.etime
 get(e::BenchmarkEntry, unit::Gps) = (1.0e-9 * e.plen * e.nruns) / e.etime
 
 
-function _show_table(bt::BenchmarkTable, unit::BenchmarkUnit)
+function _show_table(bt::BenchmarkTable, unit::BenchmarkUnit, cfghead::String)
     m = length(bt.cfgs)
     n = length(bt.procs)
-    S = Matrix(String, m+1, n+1)
-    S[1,1] = ""
+    S = Array(String, m+1, n+1)
+    S[1,1] = cfghead
     for j=1:n; S[1,j+1] = procname(bt,j); end
     for i=1:m; S[i+1,1] = cfgname(bt,i); end
 
@@ -95,7 +95,7 @@ function _show_table(bt::BenchmarkTable, unit::BenchmarkUnit)
     return S
 end
 
-function show(io::IO, bt::BenchmarkTable; unit::Symbol=:sec)
+function show(io::IO, bt::BenchmarkTable; unit::Symbol=:sec, cfghead="config")
     # getting all strings first
     u = unit == :sec ? Sec() :
         unit == :msec ? MSec() :
@@ -104,7 +104,7 @@ function show(io::IO, bt::BenchmarkTable; unit::Symbol=:sec)
         unit == :mps ? Mps() :
         unit == :gps ? Gps() : 
         error("Invalid unit value :$(unit).")
-    S = _show_table(bt, unit)
+    S = _show_table(bt, u, cfghead)
     nrows, ncols = size(S)
 
     # calculate the width of each column
@@ -119,18 +119,26 @@ function show(io::IO, bt::BenchmarkTable; unit::Symbol=:sec)
     end
 
     # print the table
+    println(io, "$(typeof(bt)) [unit = $unit]")
     for i = 1:nrows
         # first column
         print(io, rpad(S[i,1], colwids[1]))
-        print(io, "  ")
+        print(io, " |  ")
         # remaining columns
         for j = 2:ncols
             print(io, lpad(S[i,j], colwids[j]))
             print(io, "  ")
         end
         println(io)
+
+        if i == 1
+            println(io, repeat("-", sum(colwids) + 2 * ncols + 2))
+        end
     end
 end
+
+show(bt::BenchmarkTable; unit::Symbol=:sec, cfghead="config") = 
+    show(STDOUT, bt; unit=unit, cfghead=cfghead)
 
 
 ##### Run Benchmarks
@@ -176,13 +184,13 @@ function run{P<:Proc}(p::P, cfg;
 
     # probing
     if nruns <= 0
-        et = @elapsed run(p, cfg)
+        et = @elapsed run(p, cfg, s)
         nruns = iceil(duration / et)
     end
 
     # measuring
     etime = @elapsed for i = 1:nruns
-        run(p, cfg)
+        run(p, cfg, s)
     end
 
     # tear down
@@ -196,7 +204,7 @@ function run{P<:Proc}(p::P, cfg;
 end
 
 
-function run(procs::Vector, cfgs::Vector; 
+function run(procs::Vector{Proc}, cfgs::Vector; 
              duration::Float64=1.0, verbose::Int=2, logger::IO=STDOUT)
     # Run a list of procedures against a list of configurations
     #
@@ -219,11 +227,11 @@ function run(procs::Vector, cfgs::Vector;
     bt = BenchmarkTable(cfgs, procs)
     m = length(cfgs)
     n = length(procs)
-    for (j, p) in procs
+    for (j, p) in enumerate(procs)
         procname = string(p)
         verbose >= 1 && println(logger, "Benchmarking $procname ...")
 
-        for (i, cfg) in cfgs
+        for (i, cfg) in enumerate(cfgs)
             cfgname = string(cfg)
             (nr, et) = run(p, cfg; duration=duration)
 
